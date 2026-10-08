@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pickleball Queue – Editor</title>
+<style>
+  :root { --green:#1b7f4b; --lime:#d6f25a; --bg:#f3f7f4; --card:#fff; --line:#d9e2dc; --text:#1c2a22; --muted:#6b7a71; --red:#c0392b; --amber:#b9770e; }
+  * { box-sizing:border-box; }
+  body { font-family: system-ui, Arial, sans-serif; margin:0; background:var(--bg); color:var(--text); }
+  header { background:var(--green); color:#fff; padding:14px 20px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
+  header h1 { margin:0; font-size:20px; }
+  header .tag { background:var(--lime); color:#16331f; font-weight:700; font-size:12px; padding:3px 8px; border-radius:99px; margin-left:8px; }
+  main { max-width:1100px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  h2 { margin:0 0 12px; font-size:17px; }
+  button { font:inherit; cursor:pointer; border:1px solid var(--green); background:var(--green); color:#fff; padding:7px 14px; border-radius:8px; }
+  button.ghost { background:#fff; color:var(--green); }
+  button.danger { background:#fff; color:var(--red); border-color:var(--red); }
+  button.sm { padding:4px 10px; font-size:13px; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  input[type=text], input[type=number], select { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; }
+  label { font-size:14px; color:var(--muted); display:block; margin-bottom:4px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .names { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:8px; margin:14px 0; }
+  .nm { display:flex; align-items:center; gap:8px; }
+  .nm input[type=text] { width:100%; }
+  .nm input[type=checkbox] { width:20px; height:20px; accent-color:var(--green); flex:none; }
+  .courts { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; }
+  .court { border:2px solid var(--green); border-radius:12px; padding:12px; background:#f0faf3; }
+  .court.paused { border-color:var(--amber); background:#fff8ec; }
+  .court h3 { margin:0 0 10px; font-size:15px; color:var(--green); }
+  .court.paused h3 { color:var(--amber); }
+  .team { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px; background:#fff; border-radius:8px; margin-bottom:8px; }
+  .team .n { font-weight:600; }
+  .score { display:flex; align-items:center; gap:6px; }
+  .score button { width:34px; padding:6px 0; }
+  .score input { width:56px; text-align:center; font-size:18px; font-weight:700; }
+  .vs { text-align:center; color:var(--muted); font-size:12px; margin:-2px 0 6px; }
+  .empty { color:var(--muted); font-style:italic; padding:14px 0; text-align:center; }
+  .player { display:inline-flex; align-items:center; gap:6px; margin:4px; padding:5px 10px; background:#e0f7fa; border-radius:99px; font-size:14px; }
+  .player b { background:var(--green); color:#fff; border-radius:99px; min-width:20px; text-align:center; font-size:12px; padding:1px 6px; }
+  .stats { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .stat { background:var(--bg); border:1px solid var(--line); border-radius:99px; padding:4px 12px; font-size:13px; }
+  .stat b { color:var(--green); }
+  .roster { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:4px 8px; }
+  .prow { display:flex; align-items:center; gap:6px; padding:3px 6px; border:1px solid var(--line); border-radius:8px; background:#fff; font-size:14px; line-height:1.2; }
+  .prow.off { background:#f1f1f1; color:var(--muted); }
+  .prow label { display:flex; align-items:center; gap:7px; flex:1; min-width:0; margin:0; cursor:pointer; color:inherit; font-size:inherit; }
+  .prow input[type=checkbox] { width:17px; height:17px; margin:0; flex:none; accent-color:var(--green); }
+  .prow .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .prow .ic { border:0; background:transparent; padding:2px 5px; font-size:14px; cursor:pointer; color:var(--muted); border-radius:6px; line-height:1; }
+  .prow .ic:hover { background:#eee; color:var(--text); }
+  .prow .ic.del:hover { color:#c0392b; }
+  .pill { font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; background:#d9f2e3; color:var(--green); margin-left:6px; }
+  .pill.off { background:#e4e4e4; color:#777; }
+  .acts { display:flex; gap:6px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); }
+  tr.off td { color:var(--muted); }
+  .win { font-weight:700; color:var(--green); }
+  .actions { display:flex; gap:8px; margin-top:6px; }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#16331f; color:#fff; padding:10px 16px; border-radius:8px; opacity:0; transition:.3s; pointer-events:none; max-width:90%; text-align:center; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏓 Pickleball Queue <span class="tag">EDITOR</span></h1>
+  <div class="row" style="gap:8px">
+    <span id="live" style="font-size:12px;opacity:.9">○ Live link starting…</span>
+    <button class="ghost" onclick="copyViewerLink()">Copy viewer link</button>
+    <button class="ghost" onclick="window.open('viewer.html','_blank')">Open viewer</button>
+    <button class="danger" onclick="resetAll()">Reset session</button>
+  </div>
+</header>
+<main id="app"></main>
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';document.head.appendChild(s)"></script>
+<script>
+const KEY = 'pickleball_state_v1';
+const channel = ('BroadcastChannel' in window) ? new BroadcastChannel('pickleball') : null;
+
+let S = load();
+let draft = { courts: 2, count: 8, names: [], active: [] };   // setup form state
+
+function blank() {
+  return { started:false, courts:2, players:[], queue:[], games:[], history:[],
+           nextId:1, mode:'rotate', partners:'mix', updated:Date.now() };
+}
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.players) return s; } catch(e) {}
+  return blank();
+}
+function save() {
+  S.updated = Date.now();
+  localStorage.setItem(KEY, JSON.stringify(S));
+  if (channel) channel.postMessage('update');
+  broadcast();
+  render();
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const P = id => S.players.find(p => p.id === id);
+const isActive = p => p.active !== false;                 // players without the flag count as active
+const nm = id => id == null ? '<em style="color:var(--muted)">needs a player…</em>' : (P(id) ? esc(P(id).name) : '?');
+let toastTimer;
+const toast = t => { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2800); };
+
+/* ---------- Setup ---------- */
+function syncDraft() {
+  document.querySelectorAll('.names .nm').forEach((row, i) => {
+    draft.names[i] = row.querySelector('input[type=text]').value;
+    draft.active[i] = row.querySelector('input[type=checkbox]').checked;
+  });
+}
+function setDraft(key, val) {
+  syncDraft();
+  draft[key] = Math.max(key === 'courts' ? 1 : 4, Math.min(key === 'courts' ? 20 : 100, parseInt(val) || 1));
+  render();
+}
+function startSession() {
+  syncDraft();
+  S = blank();
+  S.courts = draft.courts;
+  S.mode = document.getElementById('modeSel').value;
+  S.partners = document.getElementById('partSel').value;
+  for (let i = 0; i < draft.count; i++) {
+    const id = S.nextId++;
+    const on = draft.active[i] !== false;
+    S.players.push({ id, name:(draft.names[i] || '').trim() || 'Player ' + (i + 1), played:0, wins:0, pf:0, pa:0, active:on });
+    if (on) S.queue.push(id);                              // only active players enter the queue
+  }
+  S.games = Array(S.courts).fill(null);
+  S.started = true;
+  fillCourts();
+  save();
+}
+
+/* ---------- Game logic ---------- */
+function makeGame(four) {
+  const [a, b, c, d] = four;
+  const teams = S.partners === 'mix' ? [[a, c], [b, d]] : [[a, b], [c, d]];
+  return { a:teams[0], b:teams[1], sa:0, sb:0, start:Date.now() };
+}
+// Only active players are ever in S.queue, so everyone placed here is active.
+function fillCourts() {
+  while (S.games.length < S.courts) S.games.push(null);
+  // 1) fill empty seats in games already in progress (a player left) with the next active player in line
+  S.games.forEach(g => {
+    if (!g) return;
+    for (const team of [g.a, g.b])
+      for (let k = 0; k < 2; k++)
+        if (team[k] == null && S.queue.length) team[k] = S.queue.shift();
+  });
+  // 2) start new games on free courts
+  for (let i = 0; i < S.courts; i++)
+    if (!S.games[i] && S.queue.length >= 4) S.games[i] = makeGame(S.queue.splice(0, 4));
+}
+const hasHole = g => [...g.a, ...g.b].some(x => x == null);
+
+function setActive(id, on) {
+  const p = P(id); if (!p || isActive(p) === on) return;
+  let seat = null;
+  if (on) {
+    p.active = true;
+    S.queue.push(id);                                      // comes back at the end of the line
+  } else {
+    p.active = false;
+    S.queue = S.queue.filter(x => x !== id);
+    S.games.forEach((g, i) => {
+      if (!g) return;
+      [g.a, g.b].forEach(team => { const k = team.indexOf(id); if (k > -1) { team[k] = null; seat = { team, k, court:i + 1 }; } });
+    });
+  }
+  fillCourts();
+  if (!on && seat) {
+    const rep = seat.team[seat.k];
+    toast(rep != null ? `${p.name} left Court ${seat.court} – replaced by ${P(rep).name}`
+                      : `${p.name} left Court ${seat.court} – waiting for another active player`);
+  } else if (!on) toast(`${p.name} is now inactive`);
+  else toast(`${p.name} is active again – added to the queue`);
+  save();
+}
+function setPlayerCount(v) {
+  const n = Math.max(4, Math.min(100, parseInt(v) || 4));
+  const cur = S.players.length;
+  if (n === cur) { render(); return; }
+  if (n > cur) {
+    for (let i = cur; i < n; i++) {
+      const id = S.nextId++;
+      S.players.push({ id, name:'Player ' + (i + 1), played:0, wins:0, pf:0, pa:0, active:true });
+      S.queue.push(id);
+    }
+    toast(`Added ${n - cur} player${n - cur === 1 ? '' : 's'} – use Rename to set their names`);
+  } else {
+    // only players who have not played and are not on a court can be removed, newest first
+    const onCourt = new Set(S.games.filter(g => g).flatMap(g => [...g.a, ...g.b]));
+    let need = cur - n, removed = 0;
+    for (let i = S.players.length - 1; i >= 0 && need > 0; i--) {
+      const p = S.players[i];
+      if (p.played === 0 && !onCourt.has(p.id)) {
+        S.players.splice(i, 1); S.queue = S.queue.filter(x => x !== p.id); need--; removed++;
+      }
+    }
+    if (need > 0) toast(`Removed ${removed}. ${need} more can't be removed (already played or on court) – mark them inactive instead.`);
+    else toast(`Removed ${removed} player${removed === 1 ? '' : 's'}`);
+    if (!removed) { render(); return; }
+  }
+  fillCourts(); save();
+}
+function renamePlayer(id) {
+  const p = P(id); if (!p) return;
+  const input = prompt('Rename player:', p.name);
+  if (input === null) return;                              // cancelled
+  const name = input.trim().slice(0, 40);
+  if (!name) { toast('Name cannot be empty'); return; }
+  if (name === p.name) return;
+  const old = p.name;
+  p.name = name;                                           // stats, queue and court spots follow the player id
+  toast(`Renamed ${old} → ${name}`);
+  save();
+}
+function deletePlayer(id) {
+  const p = P(id);
+  if (!confirm('Delete ' + p.name + ' completely? (Only possible because they have not played yet.)')) return;
+  S.queue = S.queue.filter(x => x !== id);
+  S.players = S.players.filter(x => x.id !== id); save();
+}
+function bump(i, team, d) {
+  const g = S.games[i]; const k = team === 'a' ? 'sa' : 'sb';
+  g[k] = Math.max(0, g[k] + d); save();
+}
+function setScore(i, team, v) {
+  const g = S.games[i]; g[team === 'a' ? 'sa' : 'sb'] = Math.max(0, parseInt(v) || 0); save();
+}
+function finishGame(i) {
+  const g = S.games[i];
+  if (hasHole(g)) { alert('This court needs a replacement player before the game can be finished.'); return; }
+  if (g.sa === g.sb) { alert('Scores are tied – a pickleball game needs a winner.'); return; }
+  const aWon = g.sa > g.sb;
+  const win = aWon ? g.a : g.b, lose = aWon ? g.b : g.a;
+  [...g.a, ...g.b].forEach(id => P(id).played++);
+  g.a.forEach(id => { P(id).pf = (P(id).pf || 0) + g.sa; P(id).pa = (P(id).pa || 0) + g.sb; });
+  g.b.forEach(id => { P(id).pf = (P(id).pf || 0) + g.sb; P(id).pa = (P(id).pa || 0) + g.sa; });
+  win.forEach(id => P(id).wins++);
+  S.history.unshift({ court:i + 1, a:g.a, b:g.b, sa:g.sa, sb:g.sb, ts:Date.now() });
+  S.games[i] = null;
+  if (S.mode === 'stay' && S.queue.length >= 2) {
+    const challengers = S.queue.splice(0, 2);
+    S.games[i] = { a:win, b:challengers, sa:0, sb:0, start:Date.now() };
+    S.queue.push(...lose);
+  } else {
+    S.queue.push(...win, ...lose);
+  }
+  fillCourts(); save();
+}
+function cancelGame(i) {
+  if (!confirm('Cancel this game and put its players back at the front of the queue?')) return;
+  const g = S.games[i];
+  S.queue.unshift(...[...g.a, ...g.b].filter(x => x != null)); S.games[i] = null;
+  fillCourts(); save();
+}
+function addPlayer() {
+  const el = document.getElementById('newName'); const name = el.value.trim();
+  if (!name) return;
+  const id = S.nextId++; S.players.push({ id, name, played:0, wins:0, pf:0, pa:0, active:true }); S.queue.push(id);
+  el.value = ''; fillCourts(); save();
+}
+function setCourts(n) {
+  n = Math.max(1, Math.min(20, parseInt(n) || 1));
+  if (n < S.courts && S.games.slice(n).some(g => g)) { alert('Finish or cancel the games on the courts you are removing first.'); render(); return; }
+  S.courts = n; S.games = S.games.slice(0, n); fillCourts(); save();
+}
+function setOpt(k, v) { S[k] = v; save(); }
+function resetAll() {
+  if (!confirm('Reset everything? This clears players, games and results.')) return;
+  S = blank(); draft = { courts:2, count:8, names:[], active:[] }; save();
+}
+// ---- live sharing to other devices (peer-to-peer, no server of your own) ----
+// This editor page acts as the host. Viewers connect to it and get every change instantly,
+// so keep this editor open while people are watching.
+const PEER_OPTS = { config: { iceServers: [      // STUN finds a direct route; TURN relays traffic when networks block direct links
+  { urls:'stun:stun.l.google.com:19302' }, { urls:'stun:global.stun.twilio.com:3478' },
+  { urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'], username:'openrelayproject', credential:'openrelayproject' }
+] } };
+const PEER_KEY = 'pickleball_peer_id';
+let peer = null, conns = [], hostTries = 0;
+function liveStatus(txt) { const el = document.getElementById('live'); if (el) el.textContent = txt; }
+function broadcast() { conns.forEach(c => { try { if (c.open) c.send(S); } catch (e) {} }); }
+function startHost(newId) {
+  if (!window.Peer) { if (hostTries++ < 8) setTimeout(startHost, 1500); else liveStatus('○ Live link unavailable (offline?)'); return; }
+  let id = localStorage.getItem(PEER_KEY);
+  if (!id || newId) { id = 'pbq-' + Math.random().toString(36).slice(2, 10); localStorage.setItem(PEER_KEY, id); }
+  peer = new Peer(id, PEER_OPTS);
+  peer.on('open', () => liveStatus('● Live link ready'));
+  peer.on('connection', c => {
+    conns.push(c);
+    const upd = () => liveStatus(`● Live · ${conns.filter(x => x.open).length} viewer(s)`);
+    c.on('open', () => { try { c.send(S); } catch (e) {} upd(); });
+    c.on('close', () => { conns = conns.filter(x => x !== c); upd(); });
+    c.on('error', () => {});
+  });
+  peer.on('disconnected', () => { liveStatus('○ Reconnecting…'); try { peer.reconnect(); } catch (e) {} });
+  peer.on('error', e => {
+    if (e.type === 'unavailable-id') {                    // old session still registered – wait a moment, then take a fresh id
+      peer.destroy(); setTimeout(() => startHost(++hostTries > 2), 4000);
+    } else liveStatus('○ Live link problem: ' + e.type);
+  });
+}
+function copyViewerLink() {
+  const base = new URL('viewer.html', location.href).href.replace(/[#?].*$/, '');   // viewer.html sits next to this file
+  const id = localStorage.getItem(PEER_KEY);
+  const live = !!(peer && peer.open && id);
+  const url = live ? base + '#p=' + id
+                           : base + '#d=' + btoa(unescape(encodeURIComponent(JSON.stringify(S))));   // offline fallback: static snapshot
+  if (location.protocol === 'file:') toast('Heads up: other devices can only open this link if the files are hosted online');
+  else toast(live ? 'Live viewer link copied' : 'Live link not ready yet – this copied a snapshot. Wait for “● Live link ready” and copy again');
+  navigator.clipboard.writeText(url).catch(() => prompt('Copy this link:', url));
+}
+
+/* ---------- Ranking ---------- */
+// Order: most wins, then best win %, then point difference. Equal on all three = shared rank.
+function ranked() {
+  const rows = S.players.map(p => ({ p, g:p.played, w:p.wins, l:p.played - p.wins,
+    pct:p.played ? p.wins / p.played : 0, diff:(p.pf || 0) - (p.pa || 0) }))
+    .sort((a, b) => b.w - a.w || b.pct - a.pct || b.diff - a.diff || a.p.name.localeCompare(b.p.name));
+  rows.forEach((r, i) => {
+    const prev = rows[i - 1];
+    r.rank = prev && prev.w === r.w && prev.pct === r.pct && prev.diff === r.diff ? prev.rank : i + 1;
+  });
+  return rows;
+}
+const medal = r => r.g > 0 && r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : '';
+
+/* ---------- Render ---------- */
+function render() {
+  const app = document.getElementById('app');
+  const focused = document.activeElement && document.activeElement.id;
+  app.innerHTML = S.started ? renderMain() : renderSetup();
+  if (focused) { const el = document.getElementById(focused); if (el) el.focus(); }
+}
+
+function renderSetup() {
+  let fields = '';
+  for (let i = 0; i < draft.count; i++)
+    fields += `<div class="nm"><input type="checkbox" title="Active (untick if not playing)" ${draft.active[i] === false ? '' : 'checked'}><input type="text" placeholder="Player ${i + 1}" value="${esc(draft.names[i] || '')}"></div>`;
+  return `
+  <section class="card">
+    <h2>Set up session</h2>
+    <div class="row">
+      <div><label>Number of courts</label><input type="number" min="1" max="20" value="${draft.courts}" onchange="setDraft('courts', this.value)"></div>
+      <div><label>Number of players</label><input type="number" min="4" max="100" value="${draft.count}" onchange="setDraft('count', this.value)"></div>
+      <div><label>After a game</label>
+        <select id="modeSel"><option value="rotate">Everyone rotates to back of queue</option><option value="stay">Winners stay on court</option></select></div>
+      <div><label>Partners</label>
+        <select id="partSel"><option value="mix">Mix partners</option><option value="keep">Keep queue pairs</option></select></div>
+    </div>
+    <h2 style="margin-top:18px">Player names</h2>
+    <p style="color:var(--muted);font-size:13px;margin:0">✔ = <b>active</b> (still willing to play). Untick anyone who is not playing yet – they stay out of the queue until you mark them active.</p>
+    <div class="names">${fields}</div>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 12px">Blank names become “Player #”. The first 4 active players per court start playing, in the order listed.</p>
+    <button onclick="startSession()">Start session</button>
+  </section>`;
+}
+
+function renderMain() {
+  const inGame = new Set(S.games.filter(g => g).flatMap(g => [...g.a, ...g.b]).filter(x => x != null));
+  const activeN = S.players.filter(isActive).length;
+
+  const courts = S.games.map((g, i) => {
+    if (!g) return `<div class="court"><h3>Court ${i + 1}</h3><div class="empty">Waiting for 4 active players…</div></div>`;
+    const hole = hasHole(g);
+    const side = t => `
+      <div class="team"><span class="n">${g[t].map(nm).join(' &amp; ')}</span>
+        <span class="score">
+          <button class="ghost" onclick="bump(${i},'${t}',-1)">−</button>
+          <input type="number" min="0" value="${g['s' + t]}" onchange="setScore(${i},'${t}',this.value)">
+          <button onclick="bump(${i},'${t}',1)">+</button>
+        </span></div>`;
+    return `<div class="court ${hole ? 'paused' : ''}"><h3>Court ${i + 1}${hole ? ' – paused, needs a player' : ''}</h3>
+      ${side('a')}<div class="vs">vs</div>${side('b')}
+      <div class="actions"><button onclick="finishGame(${i})" ${hole ? 'disabled' : ''}>Finish game</button><button class="danger" onclick="cancelGame(${i})">Cancel</button></div></div>`;
+  }).join('');
+
+  const queue = S.queue.length
+    ? S.queue.map((id, n) => `<span class="player"><b>${n + 1}</b>${nm(id)}</span>`).join('')
+    : '<div class="empty">No active players waiting</div>';
+
+  const roster = S.players.map(p => {
+    const on = isActive(p), playing = inGame.has(p.id);
+    const tip = `${p.played} game${p.played === 1 ? '' : 's'}${playing ? ' · playing now' : on ? ' · in queue' : ' · inactive'}`;
+    return `<div class="prow ${on ? '' : 'off'}" title="${tip}">
+      <label><input type="checkbox" ${on ? 'checked' : ''} onchange="setActive(${p.id}, this.checked)"><span class="nm">${esc(p.name)}${playing ? ' 🏓' : ''}</span></label>
+      <button class="ic" title="Rename" onclick="renamePlayer(${p.id})">✎</button>${p.played === 0 && !playing ? `<button class="ic del" title="Delete player" onclick="deletePlayer(${p.id})">×</button>` : ''}
+    </div>`;
+  }).join('');
+
+  const standings = ranked().map(r =>
+    `<tr class="${isActive(r.p) ? '' : 'off'}"><td>${medal(r) || r.rank}</td><td>${esc(r.p.name)}${inGame.has(r.p.id) ? ' 🏓' : ''}${isActive(r.p) ? '' : ' <span class="pill off">INACTIVE</span>'}</td><td>${r.g}</td><td>${r.w}</td><td>${r.l}</td><td>${Math.round(r.pct * 100)}%</td><td>${r.diff > 0 ? '+' : ''}${r.diff}</td></tr>`).join('');
+
+  const hist = S.history.slice(0, 15).map(h => {
+    const aw = h.sa > h.sb;
+    return `<tr><td>Ct ${h.court}</td><td class="${aw ? 'win' : ''}">${h.a.map(nm).join(' &amp; ')} (${h.sa})</td><td class="${!aw ? 'win' : ''}">${h.b.map(nm).join(' &amp; ')} (${h.sb})</td></tr>`;
+  }).join('') || '<tr><td colspan="3" class="empty">No games finished yet</td></tr>';
+
+  return `
+  <section class="card">
+    <div class="row">
+      <div><label>Courts</label><input type="number" min="1" max="20" value="${S.courts}" onchange="setCourts(this.value)" style="width:80px"></div>
+      <div><label>Players</label><input type="number" min="4" max="100" value="${S.players.length}" onchange="setPlayerCount(this.value)" style="width:80px"></div>
+      <div><label>After a game</label>
+        <select onchange="setOpt('mode', this.value)"><option value="rotate" ${S.mode === 'rotate' ? 'selected' : ''}>Everyone rotates</option><option value="stay" ${S.mode === 'stay' ? 'selected' : ''}>Winners stay on</option></select></div>
+      <div><label>Partners</label>
+        <select onchange="setOpt('partners', this.value)"><option value="mix" ${S.partners === 'mix' ? 'selected' : ''}>Mix partners</option><option value="keep" ${S.partners === 'keep' ? 'selected' : ''}>Keep queue pairs</option></select></div>
+    </div>
+    <div class="stats">
+      <span class="stat">Active <b>${activeN}</b></span>
+      <span class="stat">Inactive <b>${S.players.length - activeN}</b></span>
+      <span class="stat">Playing now <b>${inGame.size}</b></span>
+      <span class="stat">Waiting <b>${S.queue.length}</b></span>
+    </div>
+  </section>
+  <section class="card"><h2>Courts</h2><div class="courts">${courts}</div></section>
+  <section class="card"><h2>Queue – active players only (${S.queue.length})</h2>${queue}</section>
+  <section class="card"><h2>Players</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 8px">Tick = still playing. Untick when someone is going home: they leave the queue and the next player takes their court spot. Use ✎ to rename and × to delete (only if they have not played).</p>
+    <div class="roster">${roster}</div>
+    <div class="row" style="margin-top:12px"><input type="text" id="newName" placeholder="Add a new player" onkeydown="if(event.key==='Enter')addPlayer()"><button onclick="addPlayer()">Add player</button></div>
+  </section>
+  <section class="card"><h2>Leaderboard</h2><table><tr><th>#</th><th>Player</th><th>Games</th><th>W</th><th>L</th><th>Win %</th><th>+/−</th></tr>${standings}</table>
+    <p style="color:var(--muted);font-size:13px;margin:10px 0 0">Ranked by wins, then win %, then point difference. 🏓 = playing now.</p></section>
+  <section class="card"><h2>Recent results</h2><table><tr><th>Court</th><th>Team A</th><th>Team B</th></tr>${hist}</table></section>`;
+}
+
+/* keep in sync if another editor tab changes things */
+window.addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
+if (channel) channel.onmessage = () => { S = load(); render(); };
+
+render();
+startHost();
+</script>
+</body>
+</html>

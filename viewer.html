@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pickleball Queue – Viewer</title>
+<style>
+  :root { --green:#1b7f4b; --lime:#d6f25a; --bg:#f3f7f4; --card:#fff; --line:#d9e2dc; --text:#1c2a22; --muted:#6b7a71; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { font-family: system-ui, Arial, sans-serif; margin:0; background:var(--bg); color:var(--text); display:flex; flex-direction:column; overflow:hidden; font-size:clamp(12px,1.7vh,16px); }
+  header { background:var(--green); color:#fff; padding:8px 16px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; flex:none; }
+  header h1 { margin:0; font-size:1.3em; }
+  header .tag { background:var(--lime); color:#16331f; font-weight:700; font-size:.6em; padding:3px 8px; border-radius:99px; margin-left:8px; vertical-align:middle; }
+  header small { opacity:.85; }
+  /* one-frame dashboard: everything visible at once, no scrolling */
+  main { flex:1; min-height:0; width:100%; padding:10px; display:grid; gap:10px; grid-template-columns:1.25fr 1.35fr 1fr; }
+  .col { display:flex; flex-direction:column; gap:10px; min-height:0; min-width:0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; min-height:0; overflow:hidden; }
+  .grow { flex:1; }
+  h2 { margin:0 0 8px; font-size:1.05em; }
+  .courts { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:8px; }
+  .court { border:2px solid var(--green); border-radius:10px; padding:8px; background:#f0faf3; }
+  .court h3 { margin:0 0 6px; font-size:.95em; color:var(--green); }
+  .team { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 8px; background:#fff; border-radius:8px; }
+  .team .n { font-weight:600; }
+  .team .s { font-size:1.7em; font-weight:800; color:var(--green); min-width:30px; text-align:right; line-height:1; }
+  .vs { text-align:center; color:var(--muted); font-size:.75em; margin:2px 0; }
+  .empty { color:var(--muted); font-style:italic; padding:8px 0; text-align:center; }
+  .player { display:inline-flex; align-items:center; gap:5px; margin:2px; padding:3px 9px; background:#e0f7fa; border-radius:99px; }
+  .player b { background:var(--green); color:#fff; border-radius:99px; min-width:18px; text-align:center; font-size:.8em; padding:1px 5px; }
+  table { width:100%; border-collapse:collapse; font-size:.9em; }
+  th, td { text-align:left; padding:3px 6px; border-bottom:1px solid var(--line); }
+  .win { font-weight:700; color:var(--green); }
+  .court.paused { border-color:#b9770e; background:#fff8ec; }
+  .court.paused h3 { color:#b9770e; }
+  .stats { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .stat { background:var(--bg); border:1px solid var(--line); border-radius:99px; padding:2px 10px; font-size:.85em; }
+  .stat b { color:var(--green); }
+  tr.off td { color:var(--muted); }
+  .pill { font-size:.7em; font-weight:700; padding:1px 6px; border-radius:99px; background:#e4e4e4; color:#777; margin-left:4px; }
+  .podium { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .pod { flex:1; min-width:110px; text-align:center; padding:4px 6px; border-radius:10px; border:2px solid var(--line); background:#fafafa; }
+  .pod.r1 { border-color:#e6b800; background:#fff9db; }
+  .pod.r2 { border-color:#a8b0b8; background:#f3f5f7; }
+  .pod.r3 { border-color:#c98a4b; background:#fbf1e8; }
+  .pod .pn { font-weight:700; }
+  .pod .ps { color:var(--muted); font-size:.8em; }
+  .lb { display:grid; gap:10px; }
+  .note { color:var(--muted); font-size:.75em; margin:6px 0 0; }
+  /* phones / narrow windows: fall back to a normal stacked page */
+  @media (max-width:900px) {
+    body { overflow:auto; display:block; font-size:15px; }
+    main { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏓 Pickleball Queue <span class="tag">VIEWER · READ ONLY</span></h1>
+  <small id="stamp"></small>
+</header>
+<main id="app"></main>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';document.head.appendChild(s)"></script>
+<script>
+const KEY = 'pickleball_state_v1';
+const channel = ('BroadcastChannel' in window) ? new BroadcastChannel('pickleball') : null;
+let S = null;
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function fromHash() {
+  const m = location.hash.match(/^#d=(.+)$/);
+  if (!m) return null;
+  try { return JSON.parse(decodeURIComponent(escape(atob(m[1])))); } catch (e) { return null; }
+}
+function fromStorage() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); return s && s.players ? s : null; } catch (e) { return null; }
+}
+// ---- live connection to the editor (works from any device) ----
+const PEER_OPTS = { config: { iceServers: [      // STUN finds a direct route; TURN relays traffic when networks block direct links
+  { urls:'stun:stun.l.google.com:19302' }, { urls:'stun:global.stun.twilio.com:3478' },
+  { urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'], username:'openrelayproject', credential:'openrelayproject' }
+] } };
+let remote = null, peerObj = null, conn = null, dialedAt = 0, liveErr = '';
+const hostId = () => { const m = location.hash.match(/^#p=([\w-]+)/); return m ? m[1] : null; };
+function dial() {
+  const id = hostId();
+  if (!id || !peerObj || !peerObj.open) return;
+  dialedAt = Date.now();
+  try { if (conn) conn.close(); } catch (e) {}
+  conn = peerObj.connect(id, { reliable:true });
+  conn.on('data', d => { if (d && d.players) { remote = d; refresh(); } });
+  conn.on('open', () => { liveErr = ''; refresh(); });
+  conn.on('close', refresh);
+  conn.on('error', e => { liveErr = (e && e.type) || 'connection-error'; refresh(); });
+}
+function startLive() {
+  if (!hostId()) return;
+  if (!window.Peer) { setTimeout(startLive, 1500); return; }
+  if (peerObj) return;
+  peerObj = new Peer(PEER_OPTS);
+  peerObj.on('open', dial);
+  peerObj.on('disconnected', () => { try { peerObj.reconnect(); } catch (e) {} });
+  peerObj.on('error', e => { liveErr = e.type; refresh(); });
+}
+const isLive = () => conn && conn.open;
+const why = () => liveErr ? ' (' + (liveErr === 'peer-unavailable' ? 'editor not found – is it open? Is this the latest link?' : liveErr) + ')' : '';
+function refresh() {
+  // Newest data wins: live feed from the editor, same-device storage, or a link snapshot.
+  const cands = [remote, fromStorage(), fromHash()].filter(Boolean);
+  S = cands.sort((a, b) => (b.updated || 0) - (a.updated || 0))[0] || null;
+  render();
+}
+
+// Order: most wins, then best win %, then point difference. Equal on all three = shared rank.
+function ranked() {
+  const rows = S.players.map(p => ({ p, g:p.played, w:p.wins, l:p.played - p.wins,
+    pct:p.played ? p.wins / p.played : 0, diff:(p.pf || 0) - (p.pa || 0) }))
+    .sort((a, b) => b.w - a.w || b.pct - a.pct || b.diff - a.diff || a.p.name.localeCompare(b.p.name));
+  rows.forEach((r, i) => {
+    const prev = rows[i - 1];
+    r.rank = prev && prev.w === r.w && prev.pct === r.pct && prev.diff === r.diff ? prev.rank : i + 1;
+  });
+  return rows;
+}
+const medal = r => r.g > 0 && r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : '';
+
+function render() {
+  const app = document.getElementById('app');
+  if (!S || !S.started) {
+    app.innerHTML = `<section class="card"><div class="empty">${hostId() ? 'Connecting to the editor…' : 'No session yet.'} Start one in the editor and this page will update by itself.</div></section>`;
+    document.getElementById('stamp').textContent = hostId() ? (isLive() ? '● Live' : '○ Connecting…' + why()) : '';
+    return;
+  }
+  const P = id => S.players.find(p => p.id === id);
+  const isActive = p => p.active !== false;
+  const nm = id => id == null ? '<em style="color:var(--muted)">needs a player…</em>' : (P(id) ? esc(P(id).name) : '?');
+  document.getElementById('stamp').textContent = (hostId() ? (isLive() ? '● Live · ' : '○ Reconnecting' + why() + ' · ') : '') + 'Updated ' + new Date(S.updated).toLocaleTimeString();
+
+  const courts = S.games.map((g, i) => {
+    if (!g) return `<div class="court"><h3>Court ${i + 1}</h3><div class="empty">Open – waiting for players</div></div>`;
+    const hole = [...g.a, ...g.b].some(x => x == null);
+    return `<div class="court ${hole ? 'paused' : ''}"><h3>Court ${i + 1}${hole ? ' – waiting for a player' : ''}</h3>
+      <div class="team"><span class="n">${g.a.map(nm).join(' &amp; ')}</span><span class="s">${g.sa}</span></div>
+      <div class="vs">vs</div>
+      <div class="team"><span class="n">${g.b.map(nm).join(' &amp; ')}</span><span class="s">${g.sb}</span></div></div>`;
+  }).join('');
+
+  const queue = S.queue.length
+    ? S.queue.map((id, n) => `<span class="player"><b>${n + 1}</b>${nm(id)}</span>`).join('')
+    : '<div class="empty">Queue is empty</div>';
+
+  const inGame = new Set(S.games.filter(g => g).flatMap(g => [...g.a, ...g.b]).filter(x => x != null));
+  const rows = ranked();
+  const rowHtml = r =>
+    `<tr class="${isActive(r.p) ? '' : 'off'}"><td>${medal(r) || r.rank}</td><td>${esc(r.p.name)}${inGame.has(r.p.id) ? ' 🏓' : ''}${isActive(r.p) ? '' : ' <span class="pill">inactive</span>'}</td><td>${r.g}</td><td>${r.w}</td><td>${r.l}</td><td>${Math.round(r.pct * 100)}%</td><td>${r.diff > 0 ? '+' : ''}${r.diff}</td></tr>`;
+  const head = '<tr><th>#</th><th>Player</th><th>G</th><th>W</th><th>L</th><th>Win%</th><th>+/−</th></tr>';
+  const split = rows.length > 12 ? Math.ceil(rows.length / 2) : rows.length;   // long lists use two columns so nothing needs scrolling
+  const tables = [rows.slice(0, split), rows.slice(split)].filter(c => c.length)
+    .map(c => `<table>${head}${c.map(rowHtml).join('')}</table>`).join('');
+  const top = rows.filter(r => r.g > 0 && r.rank <= 3).slice(0, 3);
+  const podium = top.length
+    ? `<div class="podium">${top.map(r => `<div class="pod r${r.rank}"><div class="pn">${medal(r)} ${esc(r.p.name)}</div><div class="ps">${r.g} game${r.g === 1 ? '' : 's'} · ${r.w}W ${r.l}L</div></div>`).join('')}</div>`
+    : '';
+
+  const hist = S.history.slice(0, 10).map(h => {
+    const aw = h.sa > h.sb;
+    return `<tr><td>Ct ${h.court}</td><td class="${aw ? 'win' : ''}">${h.a.map(nm).join(' &amp; ')} (${h.sa})</td><td class="${!aw ? 'win' : ''}">${h.b.map(nm).join(' &amp; ')} (${h.sb})</td></tr>`;
+  }).join('') || '<tr><td colspan="3" class="empty">No games finished yet</td></tr>';
+
+  app.innerHTML = `
+    <div class="col">
+      <section class="card"><h2>Courts</h2><div class="courts">${courts}</div></section>
+      <section class="card grow"><h2>Up next (${S.queue.length})</h2>${queue}
+        <div class="stats">
+          <span class="stat">Active <b>${S.players.filter(isActive).length}</b></span>
+          <span class="stat">Inactive <b>${S.players.filter(p => !isActive(p)).length}</b></span>
+          <span class="stat">Playing now <b>${inGame.size}</b></span>
+          <span class="stat">Waiting <b>${S.queue.length}</b></span>
+        </div></section>
+    </div>
+    <div class="col">
+      <section class="card grow"><h2>🏆 Leaderboard</h2>${podium}<div class="lb" style="grid-template-columns:repeat(${tables.split('<table>').length - 1},1fr)">${tables}</div>
+        <p class="note">Ranked by wins, then win %, then point difference. 🏓 = playing now.</p></section>
+    </div>
+    <div class="col">
+      <section class="card grow"><h2>Recent results</h2><table><tr><th>Court</th><th>Team A</th><th>Team B</th></tr>${hist}</table></section>
+    </div>`;
+}
+
+window.addEventListener('storage', e => { if (e.key === KEY) refresh(); });
+window.addEventListener('hashchange', () => { remote = null; if (peerObj) dial(); else startLive(); refresh(); });
+if (channel) channel.onmessage = refresh;
+setInterval(() => {
+  if (hostId() && peerObj && peerObj.open && !isLive() && Date.now() - dialedAt > 8000) dial();   // auto-reconnect
+  refresh();
+}, 3000);
+refresh();
+startLive();
+</script>
+</body>
+</html>
